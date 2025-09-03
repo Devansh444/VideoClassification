@@ -1,0 +1,67 @@
+import cv2
+import requests
+from collections import defaultdict
+
+# === Roboflow API config ===
+api_key = "2oOTPZOBzkE9MPeVDNwY"  
+model_id = "exercise-detection-crmtf/1"
+url = f"https://detect.roboflow.com/{model_id}?api_key={api_key}"
+
+# === Frame extraction function ===
+def extract_frames(video_path, frame_skip=10):
+    cap = cv2.VideoCapture(video_path)
+    frames = []
+    count = 0
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+        if count % frame_skip == 0:
+            frames.append(frame)
+        count += 1
+    cap.release()
+    return frames
+
+# === Predict class and confidence for each frame ===
+def get_prediction_from_frame(frame, temp_img_path="temp.jpg"):
+    cv2.imwrite(temp_img_path, frame)  # Save frame as image
+
+    with open(temp_img_path, "rb") as img_file:
+        response = requests.post(url, files={"file": img_file})
+        result = response.json()
+
+    try:
+        top_prediction = result["predictions"][0]
+        return top_prediction["class"], top_prediction["confidence"]
+    except (KeyError, IndexError):
+        return "unknown", 0.0
+
+# === Main system with confidence-weighted voting ===
+def predict_exercise_from_video(video_path):
+    frames = extract_frames(video_path, frame_skip=10)
+    weighted_votes = defaultdict(float)
+
+    print("Processing video frames...")
+
+    for i, frame in enumerate(frames):
+        label, confidence = get_prediction_from_frame(frame)
+        print(f"Frame {i + 1}: Detected {label} (Confidence: {confidence:.2f})")
+        if label != "unknown":
+            weighted_votes[label] += confidence
+
+    if not weighted_votes:
+        return "No clear prediction"
+
+    final_prediction = max(weighted_votes, key=weighted_votes.get)
+    print("\nWeighted vote scores:")
+    for label, score in weighted_votes.items():
+        print(f"- {label}: {score:.2f}")
+
+    return final_prediction
+
+# === Example usage ===
+if __name__ == "__main__":
+    video_path = "squat_15.mp4"  # Replace with your video filename
+    final_exercise = predict_exercise_from_video(video_path)
+    print("\nFinal Predicted Exercise:", final_exercise)

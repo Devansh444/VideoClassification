@@ -1,0 +1,63 @@
+import cv2
+import requests
+from collections import Counter
+
+# === Your API config ===
+api_key = "2oOTPZOBzkE9MPeVDNwY"
+model_id = "exercise-detection-crmtf/1"
+url = f"https://detect.roboflow.com/{model_id}?api_key={api_key}"
+
+# === Frame extraction ===
+def extract_frames(video_path, frame_skip=10):
+    cap = cv2.VideoCapture(video_path)
+    frames = []
+    count = 0
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+        if count % frame_skip == 0:
+            frames.append(frame)
+        count += 1
+    cap.release()
+    return frames
+
+# === Save each frame as a temporary image and send to Roboflow ===
+def get_prediction_from_frame(frame, temp_img_path="temp.jpg"):
+    cv2.imwrite(temp_img_path, frame)  # Save frame as image
+
+    with open(temp_img_path, "rb") as img_file:
+        response = requests.post(url, files={"file": img_file})
+        result = response.json()
+
+    # Handle if Roboflow detects nothing
+    try:
+        return result["predictions"][0]["class"]
+    except (KeyError, IndexError):
+        return "unknown"
+
+# === Main function ===
+def predict_exercise_from_video(video_path):
+    frames = extract_frames(video_path, frame_skip=10)
+    predictions = []
+
+    print("Processing video frames...")
+
+    for i, frame in enumerate(frames):
+        label = get_prediction_from_frame(frame)
+        print(f"Frame {i}: Detected {label}")
+        predictions.append(label)
+
+    # Majority vote
+    filtered_predictions = [p for p in predictions if p != "unknown"]
+    if not filtered_predictions:
+        return "No clear prediction"
+
+    final_prediction = Counter(filtered_predictions).most_common(1)[0][0]
+    return final_prediction
+
+# === Example usage ===
+video_path = "biceps.mp4"  # Change to your video filename
+exercise_type = predict_exercise_from_video(video_path)
+print("\nFinal Predicted Exercise:", exercise_type)

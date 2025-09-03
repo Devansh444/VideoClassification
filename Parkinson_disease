@@ -1,0 +1,13 @@
+import requests
+
+api_key = "2oOTPZOBzkE9MPeVDNwY"
+model_id = "parkinson_disease/1"  # from your screenshot
+image_path = "PdIimage.jpg"       # make sure this file exists in your working directory
+
+url = f"https://detect.roboflow.com/{model_id}?api_key={api_key}"
+
+with open(image_path, "rb") as img_file:
+    response = requests.post(url, files={"file": img_file})
+
+# Print the result
+print(response.json())
